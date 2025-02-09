@@ -3,23 +3,25 @@ import os
 import utils
 import pandas as pd
 from lol_backend_service import RiotAPI
+from set_environment import set_environment
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path='./.env')
+set_environment()
 
 riot_api = RiotAPI(os.getenv("PERSONAL_API_KEY"))
 game_name = os.getenv("PERSONAL_GAME_NAME")
 tagline = str(os.getenv("PERSONAL_TAGLINE"))
 
 player_puuid = riot_api.get_puuid_by_riot_id(game_name, tagline)
-match_list = riot_api.get_match_list("SEA", player_puuid, count=90)
+match_list = riot_api.get_match_list("SEA", player_puuid, count=100)
 
 player_match_list = []
 df_player_matches = pd.DataFrame()
 if os.path.exists(f'./player_matches/{game_name}_{tagline}_matches.csv'):
-    os.makedirs('./player_matches', exist_ok=True)
     df_player_matches = pd.read_csv(f'./player_matches/{game_name}_{tagline}_matches.csv')
 else:
+    os.makedirs('./player_matches', exist_ok=True)
     for match_id in match_list:
         match_data = riot_api.get_match_data("SEA", match_id)
         match_game_mode = match_data['info']['gameMode']

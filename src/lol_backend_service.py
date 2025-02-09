@@ -1,10 +1,10 @@
 import requests
-from src.constants import Clusters
+from constants import Clusters
 
 def send_get_request(url):
     response = requests.get(url)
     if response.status_code != 200:
-        raise requests.exceptions.HTTPError(f"Status: {response.status_code}, Message: {response.text['status']['message']}")
+        raise requests.exceptions.HTTPError(f"Status: {response.status_code}, Message: {response.text}")
     data = response.json()
     return data
 
