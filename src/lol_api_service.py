@@ -1,4 +1,3 @@
-import requests
 from constants import Clusters
 from utils import send_get_request
 
