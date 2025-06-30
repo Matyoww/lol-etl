@@ -1,6 +1,5 @@
 import requests
 import json
-from lol_api_service import RiotAPI
 
 def send_get_request(url):
     response = requests.get(url)
