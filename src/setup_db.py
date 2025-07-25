@@ -1,8 +1,6 @@
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from constants import Clusters
-from utils import send_get_request
 from src.set_environment import set_environment
 from interface.database import SQLiteClient
 
