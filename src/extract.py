@@ -1,39 +1,60 @@
 
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import json
 import utils
 import pandas as pd
-from lol_backend_service import RiotAPI
+from interface.database import SQLiteClient
+from lol_api_service import RiotAPI
 from set_environment import set_environment
-from dotenv import load_dotenv
 
-load_dotenv(dotenv_path='./.env')
 set_environment()
 
 riot_api = RiotAPI(os.getenv("PERSONAL_API_KEY"))
 game_name = os.getenv("PERSONAL_GAME_NAME")
 tagline = str(os.getenv("PERSONAL_TAGLINE"))
 
-player_puuid = riot_api.get_puuid_by_riot_id(game_name, tagline)
-match_list = riot_api.get_match_list("SEA", player_puuid, count=100)
+db_client = SQLiteClient(os.getenv("DB_PATH"))
+
+# Get player PUUID from Riot ID
+player_puuid = riot_api.dispatch("GetPuuidByRiotId", game_name, tagline)
+try:
+    sql = """
+        INSERT INTO dim_players (PUUID, RiotIDGameName, RiotTagLine)
+        VALUES (?, ?, ?)
+    """
+    db_client.open_connection()
+    db_client.execute_query(sql, (player_puuid, game_name, tagline))
+    db_client.close_connection()
+except Exception as e:
+    if "UNIQUE constraint failed" in str(e):
+        print(f"Player already exists: {game_name}#{tagline}")
+    else:
+        print(f"Error occurred: {e}")
+
+# Get match list for the player
+match_list = riot_api.dispatch("GetMatchList", "SEA", player_puuid, count=10)
 
 player_match_list = []
 df_player_matches = pd.DataFrame()
-if os.path.exists(f'./player_matches/{game_name}_{tagline}_matches.csv'):
-    df_player_matches = pd.read_csv(f'./player_matches/{game_name}_{tagline}_matches.csv')
-else:
-    os.makedirs('./player_matches', exist_ok=True)
-    for match_id in match_list:
-        match_data = riot_api.get_match_data("SEA", match_id)
-        match_game_mode = match_data['info']['gameMode']
 
-        match_data = utils.extract_player_match_data(match_data, game_name, tagline)
-        match_data = {x: match_data[x] for x in match_data if x not in ['challenges', 'missions', 'perks']}
-        match_data = pd.Series(match_data)
+for match_id in match_list:
+    match_data = riot_api.dispatch("GetMatchData", "SEA", match_id)
+    match_game_mode = match_data['info']['gameMode']
 
-        match_data['matchId'] = match_id
-        match_data['gameMode'] = match_game_mode
+    try:
+        sql = """
+            INSERT INTO dim_matches (MatchID, GameMode)
+            VALUES (?, ?)
+        """
+        db_client.open_connection()
+        db_client.execute_query(sql, (match_id, match_game_mode))
+        db_client.close_connection()
+    except Exception as e:
+        if "UNIQUE constraint failed" in str(e):
+            print(f"Match already exists: {match_id}")
+        else:
+            print(f"Error occurred: {e}")
 
-        player_match_list.append(match_data)
-
-    df_player_matches = pd.DataFrame(player_match_list)
-    df_player_matches.to_csv(f'./player_matches/{game_name}_{tagline}_matches.csv', index=False)
+    match_data = utils.extract_player_match_data(match_data, game_name, tagline)
