@@ -34,10 +34,11 @@ class SQLiteClient(DatabaseClient):
             self.connection.close()
 
     def _execute(self, query, params=None):
-        if params:
-            self.cursor.execute(query, params)
-        else:
-            self.cursor.execute(query)
+        with self.connection:
+            if params:
+                self.cursor.execute(query, params)
+            else:
+                self.cursor.execute(query)
 
     def execute_query(self, query, params=None):
         self._execute(query, params)
