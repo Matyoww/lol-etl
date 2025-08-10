@@ -26,6 +26,8 @@ class SQLiteClient(DatabaseClient):
         self.connection = None
 
     def open_connection(self):
+        if self.connection:
+            self.close_connection()
         self.connection = sqlite3.connect(self.db_path)
         self.cursor = self.connection.cursor()
 
@@ -47,7 +49,14 @@ class SQLiteClient(DatabaseClient):
     def fetch_all(self, query, params=None):
         self._execute(query, params)
         return self.cursor.fetchall()
-    
+
     def execute_script(self, script):
         self.cursor.executescript(script)
         self.connection.commit()
+
+    def map_value_to_id(self, table, pk_column, val_column, value):
+        self.open_connection()
+        query = f"SELECT {pk_column} FROM {table} WHERE {val_column} = ?"
+        result = self.fetch_all(query, (value,))
+        self.close_connection()
+        return result[0][0] if result else None
