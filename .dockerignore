@@ -1,0 +1,49 @@
+# Git files
+.git
+.gitignore
+.github
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Output data (will be generated at runtime)
+player_matches/
+db/
+
+# Sonar
+sonar-project.properties
+.scannerwork/
+
+# Documentation
+README.md
