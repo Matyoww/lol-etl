@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  extract:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - PERSONAL_API_KEY=${PERSONAL_API_KEY}
+      - PERSONAL_GAME_NAME=${PERSONAL_GAME_NAME}
+      - PERSONAL_TAGLINE=${PERSONAL_TAGLINE}
+    volumes:
+      - ./player_matches:/app/player_matches
