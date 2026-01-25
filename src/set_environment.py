@@ -10,7 +10,7 @@ default_values = {
     'SETUP_SQL': './db/setup_sqlite.sql'
 }
 
-@log_function_call
+@log_function_call()
 @task
 def set_environment():
     logger = get_run_logger()

@@ -8,13 +8,12 @@ from src.set_environment import set_environment
 from interface.database import SQLiteClient
 
 class SetupDatabase:
-    @task
     def __init__(self, db_path: str, sql_script: str, logger=None):
         self.db_client = SQLiteClient(db_path)
         self.sql_script = sql_script
         self.logger = get_run_logger()
 
-    @log_function_call
+    @log_function_call()
     @task
     def setup(self):
         logger = self.logger
@@ -33,7 +32,7 @@ class SetupDatabase:
             logger.info("Database connection closed.")
 
 @flow(name="setup_database_flow")
-@log_function_call
+@log_function_call()
 def main():
     logger = get_run_logger()
     set_environment()
