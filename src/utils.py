@@ -1,5 +1,16 @@
 import requests
-import json
+from prefect.logging import get_run_logger
+
+def log_function_call(prefix: str = ""):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            logger = get_run_logger()
+            logger.info(f"[BEGIN]: {prefix}{func.__name__}")
+            result = func(*args, **kwargs)
+            logger.info(f"[END]: {prefix}{func.__name__}")
+            return result
+        return wrapper
+    return decorator
 
 def send_get_request(url):
     response = requests.get(url)
