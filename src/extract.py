@@ -4,10 +4,17 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import json
 import utils
+import logging
 import pandas as pd
 from interface.database import SQLiteClient
 from lol_api_service import RiotAPI
 from set_environment import set_environment
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# Constants
+UNIQUE_FAILED = "UNIQUE constraint failed"
 
 set_environment()
 
@@ -26,15 +33,17 @@ try:
     """
     db_client.open_connection()
     db_client.execute_query(sql, (player_puuid, game_name, tagline))
+    logger.info(f"Player inserted: {game_name}#{tagline}")
 except Exception as e:
-    if "UNIQUE constraint failed" in str(e):
-        print(f"Player already exists: {game_name}#{tagline}")
+    if UNIQUE_FAILED in str(e):
+        logger.info(f"Player already exists: {game_name}#{tagline}")
     else:
-        print(f"Error occurred 'player puuid': {e}")
+        logger.error(f"Error occurred 'player puuid': {e}")
 finally:
     db_client.close_connection()
 
-# Get match list for the player
+
+# # Get match list for the player
 match_list = riot_api.dispatch("GetMatchList", "SEA", player_puuid, count=20)
 
 df_player_matches = pd.DataFrame()
@@ -51,7 +60,7 @@ for match_id in match_list:
         db_client.open_connection()
         db_client.execute_query(sql, (match_id, match_game_mode))
     except Exception as e:
-        if "UNIQUE constraint failed" in str(e):
+        if UNIQUE_FAILED in str(e):
             print(f"Match already exists: {match_id}")
         else:
             print(f"Error occurred 'match': {e}")
@@ -124,7 +133,7 @@ for match_id in match_list:
             p_data['MinionsKilled']
         ))
     except Exception as e:
-        if "UNIQUE constraint failed" in str(e):
+        if UNIQUE_FAILED in str(e):
             print(f"Player performance already exists: {p_data['PUUID']} - {p_data['MatchID']}")
         else:
             print(f"Error occurred 'player performance': {e}")
