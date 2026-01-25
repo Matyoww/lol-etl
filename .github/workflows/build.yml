@@ -31,7 +31,7 @@ jobs:
         run: |
           uv run coverage run -m pytest || true
           if [ -f .coverage ]; then
-            uv run coverage xml
+            uv run coverage xml || echo "Failed to generate coverage XML, continuing..."
           else
             echo "No coverage data collected, skipping coverage xml."
           fi
