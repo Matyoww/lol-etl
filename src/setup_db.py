@@ -1,22 +1,25 @@
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import log_function_call
-from prefect import flow, task
-from prefect.logging import get_run_logger
+# from utils import log_function_call
+# from prefect import flow, task
+# from prefect.logging import get_run_logger
 from src.set_environment import set_environment
-from interface.database import SQLiteClient
+from interface.database import SQLiteClient, PostgreSQLClient, DatabaseClient
+
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class SetupDatabase:
-    def __init__(self, db_path: str, sql_script: str, logger=None):
-        self.db_client = SQLiteClient(db_path)
+    def __init__(self, sql_script: str, db_client: DatabaseClient = None, logger=None):
+        self.db_client = db_client
         self.sql_script = sql_script
-        self.logger = get_run_logger()
+        # self.logger = get_run_logger()
 
-    @log_function_call()
-    @task
+    # @task
     def setup(self):
-        logger = self.logger
+        # logger = self.logger
         try:
             self.db_client.open_connection()
 
@@ -31,23 +34,23 @@ class SetupDatabase:
             self.db_client.close_connection()
             logger.info("Database connection closed.")
 
-@flow(name="setup_database_flow")
-@log_function_call()
+# @flow(name="setup_database_flow")
+# @log_function_call()
 def main():
-    logger = get_run_logger()
+    # logger = get_run_logger()
     set_environment()
 
-    db_path = os.getenv('DB_PATH')
     sql_script = os.getenv('SETUP_SQL')
 
     if not os.path.exists(sql_script):
         logger.error(f"SQL script '{sql_script}' does not exist.")
         sys.exit(1)
 
-    setup_db = SetupDatabase(db_path, sql_script, logger)
+    setup_db = SetupDatabase(sql_script, db_client=PostgreSQLClient(), logger=logger)
     setup_db.setup()
 
 if __name__ == "__main__":
-    main.serve(
-        name="setup_db",
-    )
+    main()
+    # main.serve(
+    #     name="setup_db",
+    # )

@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.utils import send_get_request
 from src.set_environment import set_environment
 from src.constants import ChampionAPI
-from interface.database import SQLiteClient
+from interface.database import SQLiteClient, PostgreSQLClient, DatabaseClient
 
 def get_latest_version():
     return send_get_request(ChampionAPI.VERSIONS.value)[0]
@@ -18,25 +18,31 @@ class PopulateDim:
         set_environment()
         self.db_path = os.getenv('DB_PATH')
         self.table_name = table_name
-        self.data = data
+        self.data = data  # list of tuples, e.g. [('1', 'Aatrox'), ('2', "Kai'Sa")]
 
     def populate(self, custom_json = None):
-        db_client = SQLiteClient(self.db_path)
+        db_client = PostgreSQLClient()
         try:
             db_client.open_connection()
-            column_list = db_client.cursor.execute(f"PRAGMA table_info({self.table_name})").fetchall()
-            column_names = [col[1] for col in column_list]
+            column_list = db_client.fetch_all(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = %s ORDER BY ordinal_position",
+                (self.table_name,)
+            )
+            column_names = [col[0] for col in column_list]
 
-            sql_script = f"INSERT INTO {self.table_name} ({', '.join(column_names)}) VALUES "
             if custom_json:
                 with open(custom_json, 'r') as file:
                     json_data = json.load(file)
-                sql_script += ','.join([f'("{json_data[item]["id"]}", "{json_data[item]["name"]}")' for item in json_data])
+                rows = [(item['id'], item['name']) for item in json_data.values()]
             else:
-                sql_script += self.data
-            sql_script += " ON CONFLICT DO NOTHING;"
+                rows = self.data
 
-            db_client.execute_query(sql_script)
+            placeholders = ', '.join(['%s'] * len(column_names))
+            sql_script = f"INSERT INTO {self.table_name} ({', '.join(column_names)}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
+
+            for row in rows:
+                db_client.execute_query(sql_script, row)
+
             print(f"{self.table_name} populated successfully.")
         except Exception as e:
             print(f"An error occurred while populating {self.table_name}: {e}")
@@ -46,8 +52,7 @@ class PopulateDim:
 if __name__ == "__main__":
     version = get_latest_version()
     champion_data = get_champion_data(version)
-    champion_data = [f"""("{value['key']}", "{value['name']}")""" for value in champion_data.values()]
-    champion_data = ','.join(champion_data)
+    champion_data = [(value['key'], value['name']) for value in champion_data.values()]
     singleton = PopulateDim('dim_champions', champion_data)
     singleton.populate()
 

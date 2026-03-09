@@ -1,19 +1,23 @@
 import os
-from prefect import task
-from prefect.logging import get_run_logger
-from utils import log_function_call
+# from prefect import task
+# from prefect.logging import get_run_logger
+# from utils import log_function_call
+
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 default_values = {
     'PERSONAL_GAME_NAME': 'Matyoww',
     'PERSONAL_TAGLINE': '3263',
     'DB_PATH': './db/lol_db_dev.db',
-    'SETUP_SQL': './db/setup_sqlite.sql'
+    'SETUP_SQL': './db/setup_pg.sql'
 }
 
-@log_function_call()
-@task
+# @log_function_call()
+# @task
 def set_environment():
-    logger = get_run_logger()
+    # logger = get_run_logger()
     logger.info("Setting environment variables from .env file if it exists.")
 
     env_file = './.env'
@@ -22,7 +26,7 @@ def set_environment():
         with open(env_file, 'r') as f:
             for line in f:
                 line = line.strip()
-                if line and not line.startswith('#'):
+                if line and not line.startswith('#') and line != '':
                     key, value = line.split('=', 1)
                     os.environ[key.strip()] = value.strip()
 

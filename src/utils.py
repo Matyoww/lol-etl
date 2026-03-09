@@ -1,4 +1,5 @@
 import requests
+# from prefect import task
 from prefect.logging import get_run_logger
 
 def log_function_call(prefix: str = ""):
@@ -12,6 +13,7 @@ def log_function_call(prefix: str = ""):
         return wrapper
     return decorator
 
+# @task
 def send_get_request(url):
     response = requests.get(url)
     if response.status_code != 200:
@@ -19,6 +21,7 @@ def send_get_request(url):
     data = response.json()
     return data
 
+# @task
 def extract_player_match_data(match_data, game_name, tagline):
     game_info = match_data['info']
     players_game_info = game_info['participants']
