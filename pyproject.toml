@@ -8,6 +8,7 @@ dependencies = [
     "coverage>=7.13.1",
     "pandas>=3.0.0",
     "prefect>=3.6.13",
+    "psycopg[binary]>=3.3.3",
     "pytest>=9.0.2",
     "requests>=2.32.5",
 ]
