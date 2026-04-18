@@ -2,7 +2,6 @@ import os
 import sqlite3
 import psycopg
 from abc import ABC, abstractmethod
-# from prefect import task
 
 class DatabaseClient(ABC):
     NOT_IMPLEMENTED_MSG = "This method should be overridden by subclasses."
@@ -42,7 +41,6 @@ class PostgreSQLClient(DatabaseClient):
         self.cursor = self.connection.cursor()
         print("PostgreSQL connection opened.")
 
-    # @task
     def close_connection(self):
         if self.cursor:
             self.cursor.close()
@@ -52,31 +50,26 @@ class PostgreSQLClient(DatabaseClient):
             self.connection = None
             print("PostgreSQL connection closed.")
 
-    # @task
     def _execute(self, query, params=None):
         if params:
             self.cursor.execute(query, params)
         else:
             self.cursor.execute(query)
 
-    # @task
     def execute_query(self, query, params=None):
         self._execute(query, params)
         self.connection.commit()
 
-    # @task
     def fetch_all(self, query, params=None):
         self._execute(query, params)
         return self.cursor.fetchall()
 
-    # @task
     def execute_script(self, script):
         statements = [s.strip() for s in script.split(";") if s.strip()]
         for statement in statements:
             self.cursor.execute(statement)
         self.connection.commit()
 
-    # @task
     def map_value_to_id(self, table, pk_column, val_column, value):
         self.open_connection()
         query = f"SELECT {pk_column} FROM {table} WHERE {val_column} = %s"
@@ -90,19 +83,16 @@ class SQLiteClient(DatabaseClient):
         self.db_path = db_path
         self.connection = None
 
-    # @task
     def open_connection(self):
         if self.connection:
             self.close_connection()
         self.connection = sqlite3.connect(self.db_path)
         self.cursor = self.connection.cursor()
 
-    # @task
     def close_connection(self):
         if self.connection:
             self.connection.close()
 
-    # @task
     def _execute(self, query, params=None):
         with self.connection:
             if params:
@@ -110,22 +100,18 @@ class SQLiteClient(DatabaseClient):
             else:
                 self.cursor.execute(query)
 
-    # @task
     def execute_query(self, query, params=None):
         self._execute(query, params)
         self.connection.commit()
 
-    # @task
     def fetch_all(self, query, params=None):
         self._execute(query, params)
         return self.cursor.fetchall()
 
-    # @task
     def execute_script(self, script):
         self.cursor.executescript(script)
         self.connection.commit()
 
-    # @task
     def map_value_to_id(self, table, pk_column, val_column, value):
         self.open_connection()
         query = f"SELECT {pk_column} FROM {table} WHERE {val_column} = ?"
