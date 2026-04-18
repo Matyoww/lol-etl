@@ -1,7 +1,4 @@
 import os
-# from prefect import task
-# from prefect.logging import get_run_logger
-# from utils import log_function_call
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -14,10 +11,7 @@ default_values = {
     'SETUP_SQL': './db/setup_pg.sql'
 }
 
-# @log_function_call()
-# @task
 def set_environment():
-    # logger = get_run_logger()
     logger.info("Setting environment variables from .env file if it exists.")
 
     env_file = './.env'
@@ -29,6 +23,8 @@ def set_environment():
                 if line and not line.startswith('#') and line != '':
                     key, value = line.split('=', 1)
                     os.environ[key.strip()] = value.strip()
+    else:
+        logger.warning(f"No .env file found at {env_file}, relying on existing environment variables.")
 
     logger.info("Setting default environment variables if not already set.")
     for key in default_values.keys():
