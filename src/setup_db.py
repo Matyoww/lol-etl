@@ -1,9 +1,4 @@
 import os
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# from utils import log_function_call
-# from prefect import flow, task
-# from prefect.logging import get_run_logger
 from src.set_environment import set_environment
 from interface.database import SQLiteClient, PostgreSQLClient, DatabaseClient
 
@@ -12,14 +7,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class SetupDatabase:
-    def __init__(self, sql_script: str, db_client: DatabaseClient = None, logger=None):
+    def __init__(self, sql_script: str, db_client: DatabaseClient = None):
         self.db_client = db_client
         self.sql_script = sql_script
-        # self.logger = get_run_logger()
 
-    # @task
     def setup(self):
-        # logger = self.logger
         try:
             self.db_client.open_connection()
 
@@ -34,10 +26,7 @@ class SetupDatabase:
             self.db_client.close_connection()
             logger.info("Database connection closed.")
 
-# @flow(name="setup_database_flow")
-# @log_function_call()
 def main():
-    # logger = get_run_logger()
     set_environment()
 
     sql_script = os.getenv('SETUP_SQL')
@@ -51,6 +40,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # main.serve(
-    #     name="setup_db",
-    # )

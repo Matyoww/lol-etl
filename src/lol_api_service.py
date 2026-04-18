@@ -1,10 +1,10 @@
+import logging
 import requests
-from constants import Clusters
-from prefect import task
-from prefect.logging import get_run_logger
-from utils import log_function_call
+from src.constants import Clusters
 from abc import ABC, abstractmethod
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] %(name)s: %(message)s')
+logger = logging.getLogger(__name__)
 
 class RiotHandler(ABC):
     @abstractmethod
@@ -13,10 +13,7 @@ class RiotHandler(ABC):
 
     def __init__(self, api_key):
         self.api_key = api_key
-        self.logger = get_run_logger()
 
-    @log_function_call()
-    @task
     def _url_builder(self, cluster, endpoint):
         url = endpoint
         if cluster == "ASIA":
@@ -26,12 +23,11 @@ class RiotHandler(ABC):
         elif cluster == "PH2":
             url = f"{Clusters.PH2.value}{url}"
         else:
-            self.logger.error(f"Unsupported cluster: {cluster}")
+            logger.error(f"Unsupported cluster: {cluster}")
             raise ValueError(f"Unsupported cluster: {cluster}")
         url += f"&api_key={self.api_key}"
         return url
 
-    @task
     def send_get_request(self, url):
         response = requests.get(url)
         data = response.json()
@@ -43,7 +39,6 @@ class RiotHandler(ABC):
 
 
 class GetPuuidByRiotId(RiotHandler):
-    @task
     def handle(self, game_name, tagline):
         endpoint = f"/riot/account/v1/accounts/by-riot-id/{game_name}/{tagline}?"
         url = self._url_builder("ASIA", endpoint)
@@ -52,7 +47,6 @@ class GetPuuidByRiotId(RiotHandler):
 
 
 class GetRiotIdByPuuid(RiotHandler):
-    @task
     def handle(self, puuid):
         endpoint = f"/riot/account/v1/accounts/by-puuid/{puuid}?"
         url = self._url_builder("ASIA", endpoint)
@@ -61,7 +55,6 @@ class GetRiotIdByPuuid(RiotHandler):
 
 
 class GetFreeChampRotation(RiotHandler):
-    @task
     def handle(self, cluster):
         endpoint = "/lol/platform/v3/champion-rotations?"
         url = self._url_builder(cluster, endpoint)
@@ -70,7 +63,6 @@ class GetFreeChampRotation(RiotHandler):
 
 
 class GetMatchList(RiotHandler):
-    @task
     def handle(self, cluster, puuid, start=0, count=20):
         endpoint = f"/lol/match/v5/matches/by-puuid/{puuid}/ids?start={start}&count={count}"
         url = self._url_builder(cluster, endpoint)
@@ -79,7 +71,6 @@ class GetMatchList(RiotHandler):
 
 
 class GetMatchData(RiotHandler):
-    @task
     def handle(self, cluster, match_id):
         endpoint = f"/lol/match/v5/matches/{match_id}?"
         url = self._url_builder(cluster, endpoint)
@@ -103,7 +94,6 @@ class RiotAPI(APIService):
             "GetMatchData": GetMatchData(api_key)
         }
 
-    @task
     def dispatch(self, handler_name, *args, **kwargs):
         if handler_name in self.handlers:
             return self.handlers[handler_name].handle(*args, **kwargs)
