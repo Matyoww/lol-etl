@@ -27,7 +27,6 @@ class PostgreSQLClient(DatabaseClient):
         self.connection = None
         self.cursor = None
 
-    # @task
     def open_connection(self):
         if self.connection:
             self.close_connection()
