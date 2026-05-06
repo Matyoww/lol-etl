@@ -1,4 +1,5 @@
 import os
+import sys
 from src.set_environment import set_environment
 from interface.database import SQLiteClient, PostgreSQLClient, DatabaseClient
 
@@ -35,7 +36,7 @@ def main():
         logger.error(f"SQL script '{sql_script}' does not exist.")
         sys.exit(1)
 
-    setup_db = SetupDatabase(sql_script, db_client=PostgreSQLClient(), logger=logger)
+    setup_db = SetupDatabase(sql_script, db_client=PostgreSQLClient())
     setup_db.setup()
 
 if __name__ == "__main__":
