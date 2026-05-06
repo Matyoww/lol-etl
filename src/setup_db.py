@@ -27,7 +27,7 @@ class SetupDatabase:
             self.db_client.close_connection()
             logger.info("Database connection closed.")
 
-def main():
+def setup_database():
     set_environment()
 
     sql_script = os.getenv('SETUP_SQL')
@@ -40,4 +40,4 @@ def main():
     setup_db.setup()
 
 if __name__ == "__main__":
-    main()
+    setup_database()

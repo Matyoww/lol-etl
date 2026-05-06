@@ -49,15 +49,20 @@ class PopulateDim:
         finally:
             db_client.close_connection()
 
-if __name__ == "__main__":
+
+def populate_dimensions():
     version = get_latest_version()
     champion_data = get_champion_data(version)
     champion_data = [(value['key'], value['name']) for value in champion_data.values()]
     singleton = PopulateDim('dim_champions', champion_data)
     singleton.populate()
 
+    root_dir = os.path.dirname(os.path.abspath(__file__))
     singleton = PopulateDim('dim_roles')
-    singleton.populate(custom_json='./static/roles.json')
+    singleton.populate(custom_json=os.path.join(root_dir, '..', 'static', 'roles.json'))
 
     singleton = PopulateDim('dim_results')
-    singleton.populate(custom_json='./static/result.json')
+    singleton.populate(custom_json=os.path.join(root_dir, '..', 'static', 'result.json'))
+
+if __name__ == "__main__":
+    populate_dimensions()
