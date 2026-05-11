@@ -1,17 +1,28 @@
 import os
 import sys
 import json
+import logging
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.utils import send_get_request
 from src.set_environment import set_environment
 from src.constants import ChampionAPI
 from interface.database import SQLiteClient, PostgreSQLClient, DatabaseClient
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] %(name)s: %(message)s')
+logger = logging.getLogger(__name__)
+
+
 def get_latest_version():
-    return send_get_request(ChampionAPI.VERSIONS.value)[0]
+    version = send_get_request(ChampionAPI.VERSIONS.value)[0]
+    logger.info(f"Latest version retrieved: {version}")
+    return version
+
 
 def get_champion_data(version):
-    return send_get_request(ChampionAPI.CHAMPION.value.format(version=version))['data']
+    champion_data = send_get_request(ChampionAPI.CHAMPION.value.format(version=version))['data']
+    logger.info(f"Champion data retrieved for version {version}")
+    return champion_data
+
 
 class PopulateDim:
     def __init__(self, table_name, data = None):
@@ -63,6 +74,7 @@ def populate_dimensions():
 
     singleton = PopulateDim('dim_results')
     singleton.populate(custom_json=os.path.join(root_dir, '..', 'static', 'result.json'))
+
 
 if __name__ == "__main__":
     populate_dimensions()
