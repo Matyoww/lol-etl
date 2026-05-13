@@ -5,8 +5,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 default_values = {
-    'PERSONAL_GAME_NAME': 'Matyoww',
-    'PERSONAL_TAGLINE': '3263',
     'DB_PATH': './projects/lol-etl/db/lol_db_dev.db',
     'SETUP_SQL': './projects/lol-etl/db/setup_pg.sql',
     'RESET_SQL': './projects/lol-etl/db/reset_pg.sql'
