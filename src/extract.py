@@ -1,37 +1,164 @@
-
 import os
-import utils
+import sys
+import logging
 import pandas as pd
-from lol_backend_service import RiotAPI
-from dotenv import load_dotenv
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from interface.database import SQLiteClient, PostgreSQLClient, DatabaseClient
+from utils import extract_player_match_data
+from src.lol_api_service import RiotAPI
+from src.set_environment import set_environment
 
-load_dotenv()
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%    (levelname)s] %(name)s: %(message)s')
+logger = logging.getLogger(__name__)
 
-riot_api = RiotAPI(os.getenv("PERSONAL_API_KEY"))
-game_name = os.getenv("PERSONAL_GAME_NAME")
-tagline = str(os.getenv("PERSONAL_TAGLINE"))
+# Constants
+UNIQUE_FAILED = "UNIQUE constraint failed"
 
-player_puuid = riot_api.get_puuid_by_riot_id(game_name, tagline)
-match_list = riot_api.get_match_list("SEA", player_puuid, count=90)
+# Get player PUUID from Riot ID
+def insert_player_in_db(player_puuid, game_name, tagline, db_client: DatabaseClient):
+    try:
+        sql = """
+            INSERT INTO dim_players (PUUID, RiotIDGameName, RiotTagLine)
+            VALUES (%s, %s, %s)
+        """
+        db_client.open_connection()
+        db_client.execute_query(sql, (player_puuid, game_name, tagline,))
+        logger.info(f"Player inserted: {game_name}#{tagline}")
+    except Exception as e:
+        if UNIQUE_FAILED in str(e):
+            logger.warning(f"Player already exists: {game_name}#{tagline}")
+        else:
+            logger.error(f"Error occurred 'player puuid': {e}")
+            raise e
+    finally:
+        db_client.close_connection()
 
-player_match_list = []
-df_player_matches = pd.DataFrame()
-if os.path.exists(f'./player_matches/{game_name}_{tagline}_matches.csv'):
-    os.makedirs('./player_matches', exist_ok=True)
-    df_player_matches = pd.read_csv(f'./player_matches/{game_name}_{tagline}_matches.csv')
-else:
+
+# Get match list for the player
+def load_player_matches(count=20):
+    set_environment()
+
+    db_client = PostgreSQLClient()
+    match_list = fetch_match_ids(count=count)
+
+    df_player_matches = pd.DataFrame()
+
     for match_id in match_list:
-        match_data = riot_api.get_match_data("SEA", match_id)
-        match_game_mode = match_data['info']['gameMode']
+        p_data = match_parser(match_id)
 
-        match_data = utils.extract_player_match_data(match_data, game_name, tagline)
-        match_data = {x: match_data[x] for x in match_data if x not in ['challenges', 'missions', 'perks']}
-        match_data = pd.Series(match_data)
+        df_player_matches = pd.concat([df_player_matches, pd.DataFrame([p_data])], ignore_index=True)
 
-        match_data['matchId'] = match_id
-        match_data['gameMode'] = match_game_mode
+        sql = """
+            INSERT INTO fact_player_performances (
+                PUUID,
+                MatchID,
+                RoleID,
+                ChampionID,
+                Kills,
+                Deaths,
+                Assists,
+                GoldEarned,
+                DamageDealt,
+                DamageTaken,
+                VisionScore,
+                MinionsKilled
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
 
-        player_match_list.append(match_data)
+        try:
+            db_client.open_connection()
+            db_client.execute_query(sql, (
+                p_data['PUUID'],
+                p_data['MatchID'],
+                p_data['RoleID'],
+                p_data['ChampionID'],
+                p_data['Kills'],
+                p_data['Deaths'],
+                p_data['Assists'],
+                p_data['GoldEarned'],
+                p_data['DamageDealt'],
+                p_data['DamageTaken'],
+                p_data['VisionScore'],
+                p_data['MinionsKilled']
+            ))
+        except Exception as e:
+            if UNIQUE_FAILED in str(e):
+                logger.warning(f"Player performance already exists: {p_data['PUUID']} - {p_data['MatchID']}")
+            else:
+                logger.error(f"Error occurred 'player performance': {e}")
+        finally:
+            db_client.close_connection()
 
-    df_player_matches = pd.DataFrame(player_match_list)
-    df_player_matches.to_csv(f'./player_matches/{game_name}_{tagline}_matches.csv', index=False)
+
+def match_parser(match_id):
+    riot_api = RiotAPI(os.getenv("PERSONAL_API_KEY"))
+    game_name = os.getenv("PERSONAL_GAME_NAME")
+    tagline = str(os.getenv("PERSONAL_TAGLINE"))
+
+    db_client = PostgreSQLClient()
+    player_puuid = riot_api.dispatch("GetPuuidByRiotId", game_name, tagline)
+
+    match_data = riot_api.dispatch("GetMatchData", "SEA", match_id)
+    match_game_mode = match_data['info']['gameMode']
+
+    try:
+        sql = """
+            INSERT INTO dim_matches (MatchID, GameMode)
+            VALUES (%s, %s)
+        """
+        db_client.open_connection()
+        db_client.execute_query(sql, (match_id, match_game_mode,))
+    except Exception as e:
+        if UNIQUE_FAILED in str(e):
+            logger.warning(f"Match already exists: {match_id}")
+        else:
+            logger.error(f"Error occurred 'match': {e}")
+    finally:
+        db_client.close_connection()
+
+    p_match_data = extract_player_match_data(match_data, game_name, tagline)
+
+    p_data = {
+        'PUUID': player_puuid,
+        'MatchID': match_id,
+        'ChampionID': p_match_data['championId'],
+        'Kills': p_match_data['kills'],
+        'Deaths': p_match_data['deaths'],
+        'Assists': p_match_data['assists'],
+        'GoldEarned': p_match_data['goldEarned'],
+        'DamageDealt': p_match_data['totalDamageDealt'],
+        'DamageTaken': p_match_data['totalDamageTaken'],
+        'VisionScore': p_match_data['visionScore'],
+        'MinionsKilled': p_match_data['totalMinionsKilled']
+    }
+
+    p_data['RoleID'] = db_client.map_value_to_id(
+        table='dim_roles',
+        pk_column='RoleID',
+        val_column='RoleName',
+        value=p_match_data['role']
+    )
+
+    p_data['ChampionID'] = db_client.map_value_to_id(
+        table='dim_champions',
+        pk_column='ChampionID',
+        val_column='ChampionName',
+        value=p_match_data['championName']
+    )
+
+    return p_data
+
+
+def fetch_match_ids(count=20):
+    set_environment()
+
+    riot_api = RiotAPI(os.getenv("PERSONAL_API_KEY"))
+    game_name = os.getenv("PERSONAL_GAME_NAME")
+    tagline = str(os.getenv("PERSONAL_TAGLINE"))
+
+    player_puuid = riot_api.dispatch("GetPuuidByRiotId", game_name, tagline)
+    match_list = riot_api.dispatch("GetMatchList", "SEA", player_puuid, count=count)
+
+    print(match_list)
+
+    return match_list

@@ -1,14 +1,12 @@
-import os
-import json
-from lol_backend_service import RiotAPI
+import requests
 
-def get_champion_mapping(champ_id_list):
-    with open('./metadata/champion.json') as f:
-        champ_data = json.load(f)
 
-    champ_mapping = {int(champ_data['data'][key]['key']):champ_data['data'][key]['name'] for key in champ_data['data'].keys()}
-    champ_list = {champ_mapping[key] for key in champ_id_list}
-    return champ_list
+def send_get_request(url):
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise requests.exceptions.HTTPError(f"Status: {response.status_code}, Message: {response.text}")
+    data = response.json()
+    return data
 
 def extract_player_match_data(match_data, game_name, tagline):
     game_info = match_data['info']
