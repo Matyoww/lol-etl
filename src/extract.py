@@ -1,73 +1,122 @@
-
 import os
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import json
-import utils
 import logging
 import pandas as pd
-from interface.database import SQLiteClient
-from lol_api_service import RiotAPI
-from set_environment import set_environment
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from interface.database import SQLiteClient, PostgreSQLClient, DatabaseClient
+from utils import extract_player_match_data
+from src.lol_api_service import RiotAPI
+from src.set_environment import set_environment
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%    (levelname)s] %(name)s: %(message)s')
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 # Constants
 UNIQUE_FAILED = "UNIQUE constraint failed"
 
-set_environment()
-
-riot_api = RiotAPI(os.getenv("PERSONAL_API_KEY"))
-game_name = os.getenv("PERSONAL_GAME_NAME")
-tagline = str(os.getenv("PERSONAL_TAGLINE"))
-
-db_client = SQLiteClient(os.getenv("DB_PATH"))
-
 # Get player PUUID from Riot ID
-player_puuid = riot_api.dispatch("GetPuuidByRiotId", game_name, tagline)
-try:
-    sql = """
-        INSERT INTO dim_players (PUUID, RiotIDGameName, RiotTagLine)
-        VALUES (?, ?, ?)
-    """
-    db_client.open_connection()
-    db_client.execute_query(sql, (player_puuid, game_name, tagline))
-    logger.info(f"Player inserted: {game_name}#{tagline}")
-except Exception as e:
-    if UNIQUE_FAILED in str(e):
-        logger.info(f"Player already exists: {game_name}#{tagline}")
-    else:
-        logger.error(f"Error occurred 'player puuid': {e}")
-finally:
-    db_client.close_connection()
+def insert_player_in_db(player_puuid, game_name, tagline, db_client: DatabaseClient):
+    try:
+        sql = """
+            INSERT INTO dim_players (PUUID, RiotIDGameName, RiotTagLine)
+            VALUES (%s, %s, %s)
+        """
+        db_client.open_connection()
+        db_client.execute_query(sql, (player_puuid, game_name, tagline,))
+        logger.info(f"Player inserted: {game_name}#{tagline}")
+    except Exception as e:
+        if UNIQUE_FAILED in str(e):
+            logger.warning(f"Player already exists: {game_name}#{tagline}")
+        else:
+            logger.error(f"Error occurred 'player puuid': {e}")
+            raise e
+    finally:
+        db_client.close_connection()
 
 
-# # Get match list for the player
-match_list = riot_api.dispatch("GetMatchList", "SEA", player_puuid, count=20)
+# Get match list for the player
+def load_player_matches(count=20):
+    set_environment()
 
-df_player_matches = pd.DataFrame()
+    db_client = PostgreSQLClient()
+    match_list = fetch_match_ids(count=count)
 
-for match_id in match_list:
+    df_player_matches = pd.DataFrame()
+
+    for match_id in match_list:
+        p_data = match_parser(match_id)
+
+        df_player_matches = pd.concat([df_player_matches, pd.DataFrame([p_data])], ignore_index=True)
+
+        sql = """
+            INSERT INTO fact_player_performances (
+                PUUID,
+                MatchID,
+                RoleID,
+                ChampionID,
+                Kills,
+                Deaths,
+                Assists,
+                GoldEarned,
+                DamageDealt,
+                DamageTaken,
+                VisionScore,
+                MinionsKilled
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+
+        try:
+            db_client.open_connection()
+            db_client.execute_query(sql, (
+                p_data['PUUID'],
+                p_data['MatchID'],
+                p_data['RoleID'],
+                p_data['ChampionID'],
+                p_data['Kills'],
+                p_data['Deaths'],
+                p_data['Assists'],
+                p_data['GoldEarned'],
+                p_data['DamageDealt'],
+                p_data['DamageTaken'],
+                p_data['VisionScore'],
+                p_data['MinionsKilled']
+            ))
+        except Exception as e:
+            if UNIQUE_FAILED in str(e):
+                logger.warning(f"Player performance already exists: {p_data['PUUID']} - {p_data['MatchID']}")
+            else:
+                logger.error(f"Error occurred 'player performance': {e}")
+        finally:
+            db_client.close_connection()
+
+
+def match_parser(match_id):
+    riot_api = RiotAPI(os.getenv("PERSONAL_API_KEY"))
+    game_name = os.getenv("PERSONAL_GAME_NAME")
+    tagline = str(os.getenv("PERSONAL_TAGLINE"))
+
+    db_client = PostgreSQLClient()
+    player_puuid = riot_api.dispatch("GetPuuidByRiotId", game_name, tagline)
+
     match_data = riot_api.dispatch("GetMatchData", "SEA", match_id)
     match_game_mode = match_data['info']['gameMode']
 
     try:
         sql = """
             INSERT INTO dim_matches (MatchID, GameMode)
-            VALUES (?, ?)
+            VALUES (%s, %s)
         """
         db_client.open_connection()
-        db_client.execute_query(sql, (match_id, match_game_mode))
+        db_client.execute_query(sql, (match_id, match_game_mode,))
     except Exception as e:
         if UNIQUE_FAILED in str(e):
-            print(f"Match already exists: {match_id}")
+            logger.warning(f"Match already exists: {match_id}")
         else:
-            print(f"Error occurred 'match': {e}")
+            logger.error(f"Error occurred 'match': {e}")
     finally:
         db_client.close_connection()
 
-    p_match_data = utils.extract_player_match_data(match_data, game_name, tagline)
+    p_match_data = extract_player_match_data(match_data, game_name, tagline)
 
     p_data = {
         'PUUID': player_puuid,
@@ -97,45 +146,19 @@ for match_id in match_list:
         value=p_match_data['championName']
     )
 
-    df_player_matches = pd.concat([df_player_matches, pd.DataFrame([p_data])], ignore_index=True)
+    return p_data
 
-    sql = """
-        INSERT INTO fact_player_performances (
-            PUUID,
-            MatchID,
-            RoleID,
-            ChampionID,
-            Kills,
-            Deaths,
-            Assists,
-            GoldEarned,
-            DamageDealt,
-            DamageTaken,
-            VisionScore,
-            MinionsKilled
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """
 
-    try:
-        db_client.open_connection()
-        db_client.execute_query(sql, (
-            p_data['PUUID'],
-            p_data['MatchID'],
-            p_data['RoleID'],
-            p_data['ChampionID'],
-            p_data['Kills'],
-            p_data['Deaths'],
-            p_data['Assists'],
-            p_data['GoldEarned'],
-            p_data['DamageDealt'],
-            p_data['DamageTaken'],
-            p_data['VisionScore'],
-            p_data['MinionsKilled']
-        ))
-    except Exception as e:
-        if UNIQUE_FAILED in str(e):
-            print(f"Player performance already exists: {p_data['PUUID']} - {p_data['MatchID']}")
-        else:
-            print(f"Error occurred 'player performance': {e}")
-    finally:
-        db_client.close_connection()
+def fetch_match_ids(count=20):
+    set_environment()
+
+    riot_api = RiotAPI(os.getenv("PERSONAL_API_KEY"))
+    game_name = os.getenv("PERSONAL_GAME_NAME")
+    tagline = str(os.getenv("PERSONAL_TAGLINE"))
+
+    player_puuid = riot_api.dispatch("GetPuuidByRiotId", game_name, tagline)
+    match_list = riot_api.dispatch("GetMatchList", "SEA", player_puuid, count=count)
+
+    print(match_list)
+
+    return match_list
