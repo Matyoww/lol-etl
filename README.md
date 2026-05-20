@@ -13,16 +13,14 @@ flowchart TD
     RiotAPI(["Riot API"])
     DataDragon(["Data Dragon API"])
 
-    subgraph computer["Local Terminal"]
-        subgraph docker["Docker"]
-            subgraph airflow["Apache Airflow"]
-                direction LR
-                Extract["Extract: src/extract.py"]
-                PopulateDim["Populate Dims: src/populate_dim.py"]
-                SetupDB["Setup DB: src/setup_db.py"]
-            end
-            DB[("PostgreSQL")]
+    subgraph docker["Docker"]
+        subgraph airflow["Apache Airflow"]
+            direction LR
+            Extract["Extract: src/extract.py"]
+            PopulateDim["Populate Dims: src/populate_dim.py"]
+            SetupDB["Setup DB: src/setup_db.py"]
         end
+        DB[("PostgreSQL")]
     end
 
     RiotAPI -->|"Match data / Player PUUIDs"| Extract
