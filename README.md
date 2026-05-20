@@ -105,14 +105,6 @@ erDiagram
         INT ChampionID PK
         TEXT ChampionName
     }
-    dim_results {
-        SERIAL ResultID PK
-        TEXT Result
-    }
-    processed_matches {
-        TEXT MatchID PK
-        TIMESTAMP ProcessedAt
-    }
 
     dim_players ||--o{ fact_player_performances : "PUUID"
     dim_matches ||--o{ fact_player_performances : "MatchID"
