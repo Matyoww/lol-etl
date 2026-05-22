@@ -13,16 +13,14 @@ flowchart TD
     RiotAPI(["Riot API"])
     DataDragon(["Data Dragon API"])
 
-    subgraph computer["Local Terminal"]
-        subgraph docker["Docker"]
-            subgraph airflow["Apache Airflow"]
-                direction LR
-                Extract["Extract: src/extract.py"]
-                PopulateDim["Populate Dims: src/populate_dim.py"]
-                SetupDB["Setup DB: src/setup_db.py"]
-            end
-            DB[("PostgreSQL")]
+    subgraph docker["Docker"]
+        subgraph airflow["Apache Airflow"]
+            direction LR
+            Extract["Extract: src/extract.py"]
+            PopulateDim["Populate Dims: src/populate_dim.py"]
+            SetupDB["Setup DB: src/setup_db.py"]
         end
+        DB[("PostgreSQL")]
     end
 
     RiotAPI -->|"Match data / Player PUUIDs"| Extract
@@ -71,6 +69,48 @@ The warehouse uses a star schema centred on `fact_player_performances`:
 | `dim_roles` | Role/position lookup |
 | `dim_results` | Win/loss lookup |
 | `processed_matches` | Deduplication tracking for processed matches |
+
+### Schema Diagram
+
+```mermaid
+erDiagram
+    fact_player_performances {
+        TEXT PUUID PK
+        TEXT MatchID PK
+        INT RoleID FK
+        INT ChampionID FK
+        INT Kills
+        INT Deaths
+        INT Assists
+        INT GoldEarned
+        INT DamageDealt
+        INT DamageTaken
+        INT VisionScore
+        INT MinionsKilled
+    }
+    dim_players {
+        TEXT PUUID PK
+        TEXT RiotIDGameName
+        TEXT RiotTagLine
+    }
+    dim_matches {
+        TEXT MatchID PK
+        TEXT GameMode
+    }
+    dim_roles {
+        SERIAL RoleID PK
+        TEXT RoleName
+    }
+    dim_champions {
+        INT ChampionID PK
+        TEXT ChampionName
+    }
+
+    dim_players ||--o{ fact_player_performances : "PUUID"
+    dim_matches ||--o{ fact_player_performances : "MatchID"
+    dim_roles ||--o{ fact_player_performances : "RoleID"
+    dim_champions ||--o{ fact_player_performances : "ChampionID"
+```
 
 ## Prerequisites
 
