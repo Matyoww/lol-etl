@@ -67,8 +67,8 @@ The warehouse uses a star schema centred on `fact_player_performances`:
 | `dim_matches` | Match ID and game mode |
 | `dim_champions` | Champion ID and name (sourced from Data Dragon) |
 | `dim_roles` | Role/position lookup |
-| `dim_results` | Win/loss lookup |
-| `processed_matches` | Deduplication tracking for processed matches |
+| `dim_results` | Win/loss lookup 🚧 |
+| `processed_matches` | Deduplication tracking for processed matches 🚧 |
 
 ### Schema Diagram
 
