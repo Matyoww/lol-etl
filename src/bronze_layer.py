@@ -2,7 +2,6 @@ import os
 import sys
 import logging
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# from utils import extract_player_match_data
 from src.lol_api_service import RiotAPI
 from src.set_environment import set_environment
 from src.bigquery.insert import insert_match_to_bronze
