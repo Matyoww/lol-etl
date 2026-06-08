@@ -1,76 +1,90 @@
 # lol-etl
 
-An ETL pipeline for extracting, transforming, and loading League of Legends match data using the Riot Games API into a PostgreSQL data warehouse.
+An ETL pipeline for extracting, transforming, and loading League of Legends match data using the Riot Games API into a BigQuery data lake and PostgreSQL data warehouse.
 
 ## Overview
 
-This project pulls match history and player performance data from the Riot Games API and loads it into a star-schema PostgreSQL database. It supports multiple players and is designed to run as an Apache Airflow pipeline.
+This project pulls match history and player performance data from the Riot Games API and loads it through a medallion architecture: raw match JSON is landed in a **BigQuery Bronze layer**, then transformed and served via a **PostgreSQL Silver/Warehouse layer**. It supports multiple players and is designed to run as an Apache Airflow pipeline.
 
-## Architecture (WIP) 🚧
+## Architecture
 
 ```mermaid
 flowchart TD
-    RiotAPI(["Riot API"])
-    DataDragon(["Data Dragon API"])
+    RiotAPI(["☁️ Riot Games API"])
+    DataDragon(["☁️ Data Dragon API"])
 
-    subgraph docker["Docker"]
-        subgraph airflow["Apache Airflow"]
-            direction LR
-            Extract["Extract: src/extract.py"]
-            PopulateDim["Populate Dims: src/populate_dim.py"]
-            SetupDB["Setup DB: src/setup_db.py"]
-        end
-        DB[("PostgreSQL")]
+    subgraph Airflow ["🌀 Apache Airflow (Docker)"]
+        Extract["src/extract.py\nFetch match IDs + raw payloads"]
+        PopulateDim["src/populate_dim.py\nSeed dimension tables"]
+        Transform["Silver Transform\n(next layer — WIP 🚧)"]
     end
 
-    RiotAPI -->|"Match data / Player PUUIDs"| Extract
-    DataDragon -->|"Champion data"| PopulateDim
-    Extract -->|"fact_player_performances"| DB
-    PopulateDim -->|"dim_champions / dim_roles / dim_results"| DB
-    SetupDB -->|"Schema DDL"| DB
+    subgraph Bronze ["🥉 Bronze — BigQuery"]
+        BQ[("lol_bronze.match_raw\nRaw JSON payloads")]
+    end
+
+    subgraph Silver ["🥈 Silver — PostgreSQL (Docker)"]
+        Fact[("fact_player_performances")]
+        Dims[("dim_players / dim_matches\ndim_champions / dim_roles")]
+    end
+
+    RiotAPI -->|"Match data + PUUIDs"| Extract
+    DataDragon -->|"Champion metadata"| PopulateDim
+    Extract -->|"insert_match_to_bronze()"| BQ
+    Extract -->|"INSERT facts"| Fact
+    PopulateDim -->|"Seed dims"| Dims
+    BQ -->|"fetch_unprocessed_matches()"| Transform
+    Transform -->|"Parsed & enriched rows"| Fact
 ```
 
-## Project Structure (WIP) 🚧
+## Project Structure
 
 ```
-├── src/                    # Core ETL logic
-│   ├── extract.py          # Match extraction and fact table loading
-│   ├── lol_api_service.py  # Riot API handler classes (dispatch pattern)
-│   ├── lol_backend_service.py  # Legacy Riot API client
-│   ├── populate_dim.py     # Dimension table population (champions, roles, results)
-│   ├── setup_db.py         # Database schema setup
-│   ├── reset_db.py         # Database reset
-│   ├── set_environment.py  # Environment variable loader (.env + defaults)
-│   ├── constants.py        # API cluster and endpoint enums
-│   └── utils.py            # Shared HTTP and data helpers
+├── src/                          # Core ETL logic
+│   ├── extract.py                # Match extraction — calls Riot API, inserts to Bronze + Postgres
+│   ├── lol_api_service.py        # Riot API handler classes (dispatch pattern)
+│   ├── lol_backend_service.py    # Legacy Riot API client
+│   ├── populate_dim.py           # Dimension table population (champions, roles, results)
+│   ├── setup_db.py               # PostgreSQL schema setup
+│   ├── reset_db.py               # Database reset utility
+│   ├── set_environment.py        # Environment variable loader (.env + defaults)
+│   ├── constants.py              # API cluster and endpoint enums
+│   ├── utils.py                  # Shared HTTP and data helpers
+│   └── bigquery/                 # BigQuery Bronze layer
+│       ├── client.py             # Authenticated BigQuery client factory
+│       ├── schemas.py            # BigQuery table schemas
+│       ├── setup.py              # Dataset + table creation
+│       ├── insert.py             # Bronze insert with duplicate guard
+│       ├── fetch.py              # Bronze read — source for Silver transform
+│       └── reset_bigquery.py     # Drop/recreate Bronze tables
 ├── interface/
-│   └── database.py         # DatabaseClient abstraction (PostgreSQL + SQLite)
+│   └── database.py               # DatabaseClient abstraction (PostgreSQL + SQLite)
 ├── db/
-│   ├── setup_pg.sql        # PostgreSQL schema DDL
-│   ├── reset_pg.sql        # Drop/truncate script
-│   └── setup_sqlite.sql    # SQLite schema (dev/testing)
+│   ├── setup_pg.sql              # PostgreSQL schema DDL
+│   ├── reset_pg.sql              # Drop/truncate script
+│   └── setup_sqlite.sql          # SQLite schema (dev/testing)
 ├── static/
-│   ├── champion.json       # Champion reference data
-│   ├── roles.json          # Role dimension seed data
-│   └── result.json         # Result dimension seed data
-└── tests/                  # Test suite
+│   ├── champion.json             # Champion reference data
+│   ├── roles.json                # Role dimension seed data
+│   └── result.json               # Result dimension seed data
+└── tests/                        # Test suite
 ```
 
-## Database Schema (WIP) 🚧
+## Database Schema
 
 The warehouse uses a star schema centred on `fact_player_performances`:
 
-| Table | Description |
-|---|---|
-| `fact_player_performances` | One row per player per match (kills, deaths, assists, gold, damage, vision, CS) |
-| `dim_players` | Player PUUID and Riot ID |
-| `dim_matches` | Match ID and game mode |
-| `dim_champions` | Champion ID and name (sourced from Data Dragon) |
-| `dim_roles` | Role/position lookup |
-| `dim_results` | Win/loss lookup |
-| `processed_matches` | Deduplication tracking for processed matches |
+| Table | Layer | Description |
+|---|---|---|
+| `lol_bronze.match_raw` | BigQuery | Raw Riot API response, one row per match |
+| `fact_player_performances` | PostgreSQL | One row per player per match (kills, deaths, assists, gold, damage, vision, CS) |
+| `dim_players` | PostgreSQL | Player PUUID and Riot ID |
+| `dim_matches` | PostgreSQL | Match ID and game mode |
+| `dim_champions` | PostgreSQL | Champion ID and name (sourced from Data Dragon) |
+| `dim_roles` | PostgreSQL | Role/position lookup |
+| `dim_results` | PostgreSQL | Win/loss lookup 🚧 |
 
-### Schema Diagram
+### Star Schema
 
 ```mermaid
 erDiagram
@@ -118,9 +132,10 @@ erDiagram
 - Docker
 - Apache Airflow
 - PostgreSQL instance
+- Google Cloud project with BigQuery enabled + a service account key
 - Riot Games API key ([obtain here](https://developer.riotgames.com/))
 
-## Key Components (WIP) 🚧
+## Key Components
 
 ### `RiotAPI` (dispatch pattern)
 
@@ -138,6 +153,19 @@ puuid = riot_api.dispatch("GetPuuidByRiotId", "Matyoww", "3263")
 matches = riot_api.dispatch("GetMatchList", "SEA", puuid, count=20)
 ```
 
+### `BigQuery Bronze Layer` (`src/bigquery/`)
+
+Raw match payloads are landed in `lol_bronze.match_raw` on every extraction run.
+
+| Module | Purpose |
+|---|---|
+| `client.py` | Authenticated `bigquery.Client` factory |
+| `schemas.py` | Schema definitions for Bronze tables |
+| `setup.py` | Creates dataset and partitioned/clustered tables |
+| `insert.py` | Inserts a raw match row; skips if `match_id` already exists |
+| `fetch.py` | Reads rows from Bronze for downstream Silver processing |
+| `reset_bigquery.py` | Drops and recreates Bronze tables |
+
 ### `DatabaseClient` (abstraction layer)
 
 `interface/database.py` provides a common interface over PostgreSQL (`psycopg3`) and SQLite, making it straightforward to run the pipeline locally against SQLite or in production against PostgreSQL.
@@ -151,6 +179,7 @@ Dynamically reads column names from the target table and inserts seed data, supp
 | Package | Purpose |
 |---|---|
 | `apache-airflow` | Pipeline orchestration |
+| `google-cloud-bigquery` | BigQuery Bronze layer client |
 | `pandas` | DataFrame handling during extraction |
 | `psycopg[binary]` | PostgreSQL driver |
 | `requests` | HTTP calls to Riot and Data Dragon APIs |
